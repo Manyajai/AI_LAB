@@ -1,0 +1,62 @@
+
+
+# Alpha-Beta Pruning Implementation in Google Colab
+
+import math
+
+# Alpha-Beta Pruning function
+def alpha_beta_pruning(depth, nodeIndex, maximizingPlayer, values, alpha, beta, maxDepth, path=[]):
+    # Base case — leaf node
+    if depth == maxDepth:
+        print(f"Reached leaf node {path} → Value = {values[nodeIndex]}")
+        return values[nodeIndex], path
+
+    if maximizingPlayer:
+        maxEval = -math.inf
+        bestPath = []
+        for i in range(2):  # two children per node
+            childPath = path + [f"MAX({nodeIndex}) → MIN({nodeIndex*2+i})"]
+            eval, _ = alpha_beta_pruning(depth + 1, nodeIndex * 2 + i, False, values, alpha, beta, maxDepth, childPath)
+            maxEval = max(maxEval, eval)
+            alpha = max(alpha, eval)
+            if beta <= alpha:
+                print(f"Pruned at MAX node {nodeIndex}: α={alpha}, β={beta}")
+                break
+        return maxEval, path
+    else:
+        minEval = math.inf
+        bestPath = []
+        for i in range(2):  # two children per node
+            childPath = path + [f"MIN({nodeIndex}) → MAX({nodeIndex*2+i})"]
+            eval, _ = alpha_beta_pruning(depth + 1, nodeIndex * 2 + i, True, values, alpha, beta, maxDepth, childPath)
+            minEval = min(minEval, eval)
+            beta = min(beta, eval)
+            if beta <= alpha:
+                print(f"Pruned at MIN node {nodeIndex}: α={alpha}, β={beta}")
+                break
+        return minEval, path
+
+# Example leaf node values (like in the observation book problem)
+values = [3, 5, 6, 9, 1, 2, 0, -1]
+
+# Run the Alpha-Beta Pruning algorithm
+
+
+score, path = alpha_beta_pruning(0, 0, True, values, -math.inf, math.inf, 3)
+
+print("\n------------------------------")
+print(f"Optimal value (Root Node Value): {score}")
+print(f"Path to Root Node (MAX Mode): {path}")
+
+     
+Reached leaf node ['MAX(0) → MIN(0)', 'MIN(0) → MAX(0)', 'MAX(0) → MIN(0)'] → Value = 3
+Reached leaf node ['MAX(0) → MIN(0)', 'MIN(0) → MAX(0)', 'MAX(0) → MIN(1)'] → Value = 5
+Reached leaf node ['MAX(0) → MIN(0)', 'MIN(0) → MAX(1)', 'MAX(1) → MIN(2)'] → Value = 6
+Pruned at MAX node 1: α=6, β=5
+Reached leaf node ['MAX(0) → MIN(1)', 'MIN(1) → MAX(2)', 'MAX(2) → MIN(4)'] → Value = 1
+Reached leaf node ['MAX(0) → MIN(1)', 'MIN(1) → MAX(2)', 'MAX(2) → MIN(5)'] → Value = 2
+Pruned at MIN node 1: α=5, β=2
+
+------------------------------
+Optimal value (Root Node Value): 5
+Path to Root Node (MAX Mode): []

@@ -1,0 +1,143 @@
+
+
+# ---------------------------
+# Forward Chaining in FOL
+# Example: Prove Robert is a Criminal
+# ---------------------------
+
+# Knowledge Base (KB)
+kb = [
+    "American(Robert)",
+    "Enemy(A, America)",
+    "Missile(T1)",
+    "Owns(A, T1)",
+]
+
+# Rules
+rules = [
+    # 1. Missiles are weapons
+    (["Missile(x)"], "Weapon(x)"),
+
+    # 2. Enemy of America is hostile
+    (["Enemy(x, America)"], "Hostile(x)"),
+
+    # 3. If an American sells a weapon to a hostile nation → he is a criminal
+    (["American(p)", "Weapon(q)", "Sells(p, q, r)", "Hostile(r)"], "Criminal(p)"),
+
+    # 4. All missiles owned by A are sold to A by Robert
+    (["Missile(x)", "Owns(A, x)"], "Sells(Robert, x, A)"),
+]
+
+
+def substitute(statement, var, const):
+    """Replace variable var with const in a statement string."""
+    return statement.replace(f"({var}", f"({const}")
+
+def match(statement, pattern):
+    """Check if statement matches pattern (simple unification)."""
+    if "(" not in statement or "(" not in pattern:
+        return statement == pattern
+    pred1, args1 = statement.split("(", 1)
+    pred2, args2 = pattern.split("(", 1)
+    args1 = args1.strip(")").split(",")
+    args2 = args2.strip(")").split(",")
+    if pred1 != pred2 or len(args1) != len(args2):
+        return None
+    subst = {}
+    for a1, a2 in zip(args1, args2):
+        a1, a2 = a1.strip(), a2.strip()
+        if a2[0].islower():
+            subst[a2] = a1
+        elif a1 != a2:
+            return None
+    return subst
+
+def forward_chain_text_graph(kb, rules):
+    inferred = set(kb)
+    level = 1
+    new_inferred = True
+
+    print("Initial Facts:")
+    for f in kb:
+        print(f"  • {f}")
+    print("\n--- Forward Chaining Inference ---\n")
+
+    while new_inferred:
+        new_inferred = False
+        current_level_graph = []
+        for premises, conclusion in rules:
+            substitutions = []
+            for premise in premises:
+                for fact in inferred:
+                    substitution = match(fact, premise)
+                    if substitution:
+                        substitutions.append(substitution)
+            if len(substitutions) == len(premises):
+                combined_sub = {}
+                for s in substitutions:
+                    combined_sub.update(s)
+                new_fact = conclusion
+                for var, const in combined_sub.items():
+                    new_fact = substitute(new_fact, var, const)
+                if new_fact not in inferred:
+                    inferred.add(new_fact)
+                    new_inferred = True
+                    concrete_premises = []
+                    for p in premises:
+                        p_concrete = p
+                        for var, const in combined_sub.items():
+                            p_concrete = substitute(p_concrete, var, const)
+                        concrete_premises.append(p_concrete)
+                    dep_str = " + ".join(concrete_premises) + f" ──► {new_fact}"
+                    current_level_graph.append(dep_str)
+
+        if current_level_graph:
+            print(f"LEVEL {level}")
+            for line in current_level_graph:
+                print("  " + line)
+            print()
+            level += 1
+
+    return inferred
+
+# Run
+inferred_facts = forward_chain_text_graph(kb, rules)
+
+print("--- Final Knowledge Base ---")
+for f in inferred_facts:
+    print("  -", f)
+
+# Final conclusion check
+if "Criminal(Robert)" in inferred_facts:
+    print("\n✅ Therefore, Robert is a Criminal.")
+else:
+    print("\n❌ Could not infer that Robert is a Criminal.")
+
+     
+Initial Facts:
+  • American(Robert)
+  • Enemy(A, America)
+  • Missile(T1)
+  • Owns(A, T1)
+
+--- Forward Chaining Inference ---
+
+LEVEL 1
+  Missile(T1) ──► Weapon(T1)
+  Enemy(A, America) ──► Hostile(A)
+  Missile(T1) + Owns(A, x) ──► Sells(Robert, x, A)
+
+LEVEL 2
+  American(Robert) + Weapon(x) + Sells(Robert, q, r) + Hostile(A) ──► Criminal(Robert)
+
+--- Final Knowledge Base ---
+  - Weapon(T1)
+  - Enemy(A, America)
+  - Owns(A, T1)
+  - Hostile(A)
+  - American(Robert)
+  - Sells(Robert, x, A)
+  - Criminal(Robert)
+  - Missile(T1)
+
+✅ Therefore, Robert is a Criminal.

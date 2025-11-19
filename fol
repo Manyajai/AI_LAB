@@ -1,0 +1,590 @@
+
+
+# ============================================================================
+# FIRST ORDER LOGIC RESOLUTION - GOOGLE COLAB IMPLEMENTATION
+# ============================================================================
+# Implementation based on Week-9 AI Lab FOL Resolution presentation
+# Problem: Prove that "John likes peanuts" using Resolution Refutation
+# ============================================================================
+
+from typing import List, Dict, Set, Tuple, Optional
+from itertools import combinations
+
+class Term:
+    """Represents a term in FOL (variable, constant, or function)"""
+    def __init__(self, name: str, args: List['Term'] = None):
+        self.name = name
+        self.args = args if args else []
+        self.is_variable = name[0].islower() if name else False
+        self.is_function = len(self.args) > 0
+
+    def __str__(self):
+        if self.is_function:
+            return f"{self.name}({', '.join(str(arg) for arg in self.args)})"
+        return self.name
+
+    def __repr__(self):
+        return str(self)
+
+    def __eq__(self, other):
+        if not isinstance(other, Term):
+            return False
+        return self.name == other.name and self.args == other.args
+
+    def __hash__(self):
+        return hash((self.name, tuple(self.args)))
+
+class Literal:
+    """Represents a literal (predicate or negated predicate)"""
+    def __init__(self, predicate: str, terms: List[Term], negated: bool = False):
+        self.predicate = predicate
+        self.terms = terms
+        self.negated = negated
+
+    def negate(self):
+        return Literal(self.predicate, self.terms, not self.negated)
+
+    def __str__(self):
+        pred_str = f"{self.predicate}({', '.join(str(t) for t in self.terms)})"
+        return f"¬{pred_str}" if self.negated else pred_str
+
+    def __repr__(self):
+        return str(self)
+
+    def __eq__(self, other):
+        if not isinstance(other, Literal):
+            return False
+        return (self.predicate == other.predicate and
+                self.terms == other.terms and
+                self.negated == other.negated)
+
+    def __hash__(self):
+        return hash((self.predicate, tuple(self.terms), self.negated))
+
+class Clause:
+    """Represents a clause (disjunction of literals)"""
+    def __init__(self, literals: Set[Literal]):
+        self.literals = set(literals)
+
+    def is_empty(self):
+        return len(self.literals) == 0
+
+    def __str__(self):
+        if self.is_empty():
+            return "□ (empty clause)"
+        return " ∨ ".join(str(lit) for lit in sorted(self.literals, key=str))
+
+    def __repr__(self):
+        return str(self)
+
+    def __eq__(self, other):
+        if not isinstance(other, Clause):
+            return False
+        return self.literals == other.literals
+
+    def __hash__(self):
+        return hash(frozenset(self.literals))
+
+class Substitution:
+    """Represents a substitution (variable binding)"""
+    def __init__(self, bindings: Dict[str, Term] = None):
+        self.bindings = bindings if bindings else {}
+
+    def add(self, var: str, term: Term):
+        new_bindings = self.bindings.copy()
+        new_bindings[var] = term
+        return Substitution(new_bindings)
+
+    def apply_to_term(self, term: Term) -> Term:
+        if term.name in self.bindings:
+            return self.bindings[term.name]
+        if term.is_function:
+            new_args = [self.apply_to_term(arg) for arg in term.args]
+            return Term(term.name, new_args)
+        return term
+
+    def apply_to_literal(self, literal: Literal) -> Literal:
+        new_terms = [self.apply_to_term(t) for t in literal.terms]
+        return Literal(literal.predicate, new_terms, literal.negated)
+
+    def apply_to_clause(self, clause: Clause) -> Clause:
+        new_literals = {self.apply_to_literal(lit) for lit in clause.literals}
+        return Clause(new_literals)
+
+    def __str__(self):
+        if not self.bindings:
+            return "{}"
+        items = [f"{var}/{term}" for var, term in self.bindings.items()]
+        return "{" + ", ".join(items) + "}"
+
+def occurs_check(var: str, term: Term) -> bool:
+    """Check if variable occurs in term (prevents infinite loops)"""
+    if term.name == var:
+        return True
+    if term.is_function:
+        return any(occurs_check(var, arg) for arg in term.args)
+    return False
+
+def unify_terms(term1: Term, term2: Term, subst: Substitution) -> Optional[Substitution]:
+    """Unify two terms using the unification algorithm"""
+    term1 = subst.apply_to_term(term1)
+    term2 = subst.apply_to_term(term2)
+
+    if term1 == term2:
+        return subst
+
+    if term1.is_variable:
+        if occurs_check(term1.name, term2):
+            return None
+        return subst.add(term1.name, term2)
+
+    if term2.is_variable:
+        if occurs_check(term2.name, term1):
+            return None
+        return subst.add(term2.name, term1)
+
+    if term1.is_function and term2.is_function:
+        if term1.name != term2.name or len(term1.args) != len(term2.args):
+            return None
+
+        for arg1, arg2 in zip(term1.args, term2.args):
+            subst = unify_terms(arg1, arg2, subst)
+            if subst is None:
+                return None
+        return subst
+
+    return None
+
+def unify_literals(lit1: Literal, lit2: Literal) -> Optional[Substitution]:
+    """Unify two complementary literals"""
+    if lit1.predicate != lit2.predicate:
+        return None
+    if lit1.negated == lit2.negated:
+        return None
+    if len(lit1.terms) != len(lit2.terms):
+        return None
+
+    subst = Substitution()
+    for t1, t2 in zip(lit1.terms, lit2.terms):
+        subst = unify_terms(t1, t2, subst)
+        if subst is None:
+            return None
+
+    return subst
+
+def resolve(clause1: Clause, clause2: Clause) -> List[Tuple[Clause, Substitution]]:
+    """Resolve two clauses and return resolvents with substitutions"""
+    resolvents = []
+
+    for lit1 in clause1.literals:
+        for lit2 in clause2.literals:
+            subst = unify_literals(lit1, lit2)
+            if subst is not None:
+                new_literals = set()
+
+                for lit in clause1.literals:
+                    if lit != lit1:
+                        new_literals.add(subst.apply_to_literal(lit))
+
+                for lit in clause2.literals:
+                    if lit != lit2:
+                        new_literals.add(subst.apply_to_literal(lit))
+
+                resolvents.append((Clause(new_literals), subst))
+
+    return resolvents
+
+def resolution(clauses: Set[Clause], max_iterations: int = 100, verbose: bool = True) -> Tuple[bool, List[str]]:
+    """
+    Resolution refutation algorithm
+    Returns (True, proof) if query is proven, (False, []) otherwise
+    """
+    clauses = set(clauses)
+    proof_steps = []
+    iteration = 0
+
+    if verbose:
+        print(f"Starting resolution with {len(clauses)} clauses...")
+        print()
+
+    while iteration < max_iterations:
+        iteration += 1
+        new_clauses = set()
+
+        clause_list = list(clauses)
+        for i, c1 in enumerate(clause_list):
+            for c2 in clause_list[i:]:
+                resolvents = resolve(c1, c2)
+
+                for resolvent, subst in resolvents:
+                    step = f"Step {len(proof_steps)+1}: Resolve\n  {c1}\n  {c2}\n  Substitution: {subst}\n  Result: {resolvent}"
+                    proof_steps.append(step)
+
+                    if resolvent.is_empty():
+                        proof_steps.append("\n*** EMPTY CLAUSE DERIVED - CONTRADICTION FOUND! ***")
+                        return True, proof_steps
+
+                    new_clauses.add(resolvent)
+
+        if new_clauses.issubset(clauses):
+            proof_steps.append("No new clauses generated. Query cannot be proven.")
+            return False, proof_steps
+
+        clauses.update(new_clauses)
+
+    proof_steps.append(f"Max iterations ({max_iterations}) reached.")
+    return False, proof_steps
+
+# ============================================================================
+# PROBLEM SETUP: John likes peanuts
+# ============================================================================
+
+def create_john_peanuts_kb():
+    """
+    Create the knowledge base for the John likes peanuts problem
+
+    Knowledge Base:
+    1. John likes all kind of food: ∀x: Food(x) → Likes(John, x)
+    2. Apple is food: Food(Apple)
+    3. Vegetables are food: Food(Vegetables)
+    4. Anything anyone eats and not killed is food: ∀x,y: Eats(x,y) ∧ Alive(x) → Food(y)
+    5. Anil eats peanuts: Eats(Anil, Peanuts)
+    6. Anil is alive: Alive(Anil)
+    7. Harry eats everything Anil eats: ∀x: Eats(Anil,x) → Eats(Harry,x)
+    8. Alive implies not killed: ∀x: Alive(x) → ¬Killed(x)
+    9. Not killed implies alive: ∀x: ¬Killed(x) → Alive(x)
+
+    Query: Likes(John, Peanuts)
+    """
+
+    def var(name):
+        return Term(name)
+
+    def const(name):
+        return Term(name.upper())
+
+    clauses = set()
+
+    # 1. ∀x: Food(x) → Likes(John, x)  ==  ¬Food(x) ∨ Likes(John, x)
+    clauses.add(Clause({
+        Literal("Food", [var("x")], negated=True),
+        Literal("Likes", [const("John"), var("x")], negated=False)
+    }))
+
+    # 2. Food(Apple)
+    clauses.add(Clause({
+        Literal("Food", [const("Apple")], negated=False)
+    }))
+
+    # 3. Food(Vegetables)
+    clauses.add(Clause({
+        Literal("Food", [const("Vegetables")], negated=False)
+    }))
+
+    # 4. ∀x,y: Eats(x,y) ∧ Alive(x) → Food(y)  ==  ¬Eats(x,y) ∨ ¬Alive(x) ∨ Food(y)
+    clauses.add(Clause({
+        Literal("Eats", [var("x"), var("y")], negated=True),
+        Literal("Alive", [var("x")], negated=True),
+        Literal("Food", [var("y")], negated=False)
+    }))
+
+    # 5. Eats(Anil, Peanuts)
+    clauses.add(Clause({
+        Literal("Eats", [const("Anil"), const("Peanuts")], negated=False)
+    }))
+
+    # 6. Alive(Anil)
+    clauses.add(Clause({
+        Literal("Alive", [const("Anil")], negated=False)
+    }))
+
+    # 7. ∀x: Eats(Anil,x) → Eats(Harry,x)  ==  ¬Eats(Anil,x) ∨ Eats(Harry,x)
+    clauses.add(Clause({
+        Literal("Eats", [const("Anil"), var("x")], negated=True),
+        Literal("Eats", [const("Harry"), var("x")], negated=False)
+    }))
+
+    # 8. ∀x: Alive(x) → ¬Killed(x)  ==  ¬Alive(x) ∨ ¬Killed(x)
+    clauses.add(Clause({
+        Literal("Alive", [var("x")], negated=True),
+        Literal("Killed", [var("x")], negated=True)
+    }))
+
+    # 9. ∀x: ¬Killed(x) → Alive(x)  ==  Killed(x) ∨ Alive(x)
+    clauses.add(Clause({
+        Literal("Killed", [var("x")], negated=False),
+        Literal("Alive", [var("x")], negated=False)
+    }))
+
+    # Query (negated): ¬Likes(John, Peanuts)
+    clauses.add(Clause({
+        Literal("Likes", [const("John"), const("Peanuts")], negated=True)
+    }))
+
+    return clauses
+
+# ============================================================================
+# MAIN EXECUTION
+# ============================================================================
+
+def main():
+    print("="*80)
+    print(" FIRST ORDER LOGIC RESOLUTION THEOREM PROVER")
+    print("="*80)
+    print()
+    print("Problem: Prove that 'John likes peanuts'")
+    print()
+    print("Knowledge Base:")
+    print("  1. John likes all kind of food")
+    print("  2. Apple and vegetables are food")
+    print("  3. Anything anyone eats and not killed is food")
+    print("  4. Anil eats peanuts and still alive")
+    print("  5. Harry eats everything that Anil eats")
+    print("  6. Anyone who is alive implies not killed")
+    print("  7. Anyone who is not killed implies alive")
+    print()
+    print("Query: Does John like peanuts?")
+    print()
+    print("="*80)
+    print("CLAUSES IN CNF:")
+    print("="*80)
+    print()
+
+    # Create knowledge base
+    kb = create_john_peanuts_kb()
+
+    for i, clause in enumerate(kb, 1):
+        print(f"{i:2d}. {clause}")
+
+    print()
+    print("="*80)
+    print("RESOLUTION PROOF:")
+    print("="*80)
+    print()
+
+    # Run resolution
+    result, proof_steps = resolution(kb, max_iterations=50, verbose=False)
+
+    # Display proof steps (limited to first 15 for readability)
+    display_limit = 15
+    for i, step in enumerate(proof_steps[:display_limit]):
+        print(step)
+        print()
+
+    if len(proof_steps) > display_limit:
+        print(f"... ({len(proof_steps) - display_limit} more resolution steps)")
+        print()
+        # Show the last step if it's the conclusion
+        if "EMPTY CLAUSE" in proof_steps[-1] or "cannot be proven" in proof_steps[-1]:
+            print(proof_steps[-1])
+            print()
+
+    print("="*80)
+    print(" RESULT")
+    print("="*80)
+
+    if result:
+        print("✓ PROVEN: John likes peanuts!")
+        print()
+        print("The query has been successfully proven using resolution refutation.")
+        print("An empty clause was derived, indicating a contradiction when we")
+        print("assumed the negation of 'Likes(John, Peanuts)'. Therefore, the")
+        print("original statement must be TRUE.")
+    else:
+        print("✗ NOT PROVEN: Could not prove that John likes peanuts")
+        print()
+        print("The resolution algorithm could not derive an empty clause.")
+
+    print("="*80)
+
+if __name__ == "__main__":
+    main()
+
+# ============================================================================
+# ADDITIONAL UTILITIES
+# ============================================================================
+
+def test_simple_example():
+    """Test with a simpler example"""
+    print("\n\nTesting Simple Example:")
+    print("-" * 40)
+    print("KB: P(a), P(x) → Q(x)")
+    print("Query: Q(a)")
+    print()
+
+    def var(name):
+        return Term(name)
+    def const(name):
+        return Term(name.upper())
+
+    clauses = set()
+
+    # P(a)
+    clauses.add(Clause({
+        Literal("P", [const("a")], negated=False)
+    }))
+
+    # P(x) → Q(x)  ==  ¬P(x) ∨ Q(x)
+    clauses.add(Clause({
+        Literal("P", [var("x")], negated=True),
+        Literal("Q", [var("x")], negated=False)
+    }))
+
+    # ¬Q(a) (negated query)
+    clauses.add(Clause({
+        Literal("Q", [const("a")], negated=True)
+    }))
+
+    result, proof = resolution(clauses, max_iterations=10, verbose=False)
+
+    for step in proof:
+        print(step)
+
+    print("\nResult:", "PROVEN" if result else "NOT PROVEN")
+
+# Uncomment to run the simple test
+# test_simple_example()
+
+
+     
+================================================================================
+ FIRST ORDER LOGIC RESOLUTION THEOREM PROVER
+================================================================================
+
+Problem: Prove that 'John likes peanuts'
+
+Knowledge Base:
+  1. John likes all kind of food
+  2. Apple and vegetables are food
+  3. Anything anyone eats and not killed is food
+  4. Anil eats peanuts and still alive
+  5. Harry eats everything that Anil eats
+  6. Anyone who is alive implies not killed
+  7. Anyone who is not killed implies alive
+
+Query: Does John like peanuts?
+
+================================================================================
+CLAUSES IN CNF:
+================================================================================
+
+ 1. Alive(x) ∨ Killed(x)
+ 2. Food(y) ∨ ¬Alive(x) ∨ ¬Eats(x, y)
+ 3. Likes(JOHN, x) ∨ ¬Food(x)
+ 4. Eats(ANIL, PEANUTS)
+ 5. ¬Alive(x) ∨ ¬Killed(x)
+ 6. Food(VEGETABLES)
+ 7. ¬Likes(JOHN, PEANUTS)
+ 8. Food(APPLE)
+ 9. Eats(HARRY, x) ∨ ¬Eats(ANIL, x)
+10. Alive(ANIL)
+
+================================================================================
+RESOLUTION PROOF:
+================================================================================
+
+Step 1: Resolve
+  Alive(x) ∨ Killed(x)
+  Food(y) ∨ ¬Alive(x) ∨ ¬Eats(x, y)
+  Substitution: {}
+  Result: Food(y) ∨ Killed(x) ∨ ¬Eats(x, y)
+
+Step 2: Resolve
+  Alive(x) ∨ Killed(x)
+  ¬Alive(x) ∨ ¬Killed(x)
+  Substitution: {}
+  Result: Killed(x) ∨ ¬Killed(x)
+
+Step 3: Resolve
+  Alive(x) ∨ Killed(x)
+  ¬Alive(x) ∨ ¬Killed(x)
+  Substitution: {}
+  Result: Alive(x) ∨ ¬Alive(x)
+
+Step 4: Resolve
+  Food(y) ∨ ¬Alive(x) ∨ ¬Eats(x, y)
+  Likes(JOHN, x) ∨ ¬Food(x)
+  Substitution: {y/x}
+  Result: Likes(JOHN, x) ∨ ¬Alive(x) ∨ ¬Eats(x, x)
+
+Step 5: Resolve
+  Food(y) ∨ ¬Alive(x) ∨ ¬Eats(x, y)
+  Eats(ANIL, PEANUTS)
+  Substitution: {x/ANIL, y/PEANUTS}
+  Result: Food(PEANUTS) ∨ ¬Alive(ANIL)
+
+Step 6: Resolve
+  Food(y) ∨ ¬Alive(x) ∨ ¬Eats(x, y)
+  Eats(HARRY, x) ∨ ¬Eats(ANIL, x)
+  Substitution: {x/HARRY, y/HARRY}
+  Result: Food(HARRY) ∨ ¬Alive(HARRY) ∨ ¬Eats(ANIL, HARRY)
+
+Step 7: Resolve
+  Food(y) ∨ ¬Alive(x) ∨ ¬Eats(x, y)
+  Alive(ANIL)
+  Substitution: {x/ANIL}
+  Result: Food(y) ∨ ¬Eats(ANIL, y)
+
+Step 8: Resolve
+  Likes(JOHN, x) ∨ ¬Food(x)
+  Food(VEGETABLES)
+  Substitution: {x/VEGETABLES}
+  Result: Likes(JOHN, VEGETABLES)
+
+Step 9: Resolve
+  Likes(JOHN, x) ∨ ¬Food(x)
+  ¬Likes(JOHN, PEANUTS)
+  Substitution: {x/PEANUTS}
+  Result: ¬Food(PEANUTS)
+
+Step 10: Resolve
+  Likes(JOHN, x) ∨ ¬Food(x)
+  Food(APPLE)
+  Substitution: {x/APPLE}
+  Result: Likes(JOHN, APPLE)
+
+Step 11: Resolve
+  Eats(ANIL, PEANUTS)
+  Eats(HARRY, x) ∨ ¬Eats(ANIL, x)
+  Substitution: {x/PEANUTS}
+  Result: Eats(HARRY, PEANUTS)
+
+Step 12: Resolve
+  ¬Alive(x) ∨ ¬Killed(x)
+  Alive(ANIL)
+  Substitution: {x/ANIL}
+  Result: ¬Killed(ANIL)
+
+Step 13: Resolve
+  Alive(x) ∨ Killed(x)
+  Food(y) ∨ ¬Alive(x) ∨ ¬Eats(x, y)
+  Substitution: {}
+  Result: Food(y) ∨ Killed(x) ∨ ¬Eats(x, y)
+
+Step 14: Resolve
+  Alive(x) ∨ Killed(x)
+  Likes(JOHN, x) ∨ ¬Alive(x) ∨ ¬Eats(x, x)
+  Substitution: {}
+  Result: Killed(x) ∨ Likes(JOHN, x) ∨ ¬Eats(x, x)
+
+Step 15: Resolve
+  Alive(x) ∨ Killed(x)
+  ¬Alive(x) ∨ ¬Killed(x)
+  Substitution: {}
+  Result: Killed(x) ∨ ¬Killed(x)
+
+... (80 more resolution steps)
+
+
+*** EMPTY CLAUSE DERIVED - CONTRADICTION FOUND! ***
+
+================================================================================
+ RESULT
+================================================================================
+✓ PROVEN: John likes peanuts!
+
+The query has been successfully proven using resolution refutation.
+An empty clause was derived, indicating a contradiction when we
+assumed the negation of 'Likes(John, Peanuts)'. Therefore, the
+original statement must be TRUE.
+================================================================================

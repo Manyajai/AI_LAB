@@ -1,0 +1,102 @@
+
+
+# --- First Order Logic: Unification Algorithm ---
+
+import re
+
+def is_variable(x):
+    """Return True if x is a variable (lowercase start)."""
+    return isinstance(x, str) and x[0].islower()
+
+def parse_predicate(expr):
+    """
+    Parse a predicate like 'Eats(x, Apple)' -> ('Eats', ['x', 'Apple'])
+    """
+    name = expr[:expr.index('(')]
+    args = expr[expr.index('(')+1:-1].split(',')
+    args = [a.strip() for a in args]
+    return name, args
+
+def unify(x, y, substitutions=None):
+    """
+    Unify two expressions and return the substitution dictionary.
+    Returns None if unification fails.
+    """
+    if substitutions is None:
+        substitutions = {}
+
+    # If already substituted, replace with current substitution
+    for var in substitutions:
+        if x == var:
+            x = substitutions[var]
+        if y == var:
+            y = substitutions[var]
+
+    # If both are identical
+    if x == y:
+        return substitutions
+
+    # If x is variable
+    if is_variable(x):
+        substitutions[x] = y
+        return substitutions
+
+    # If y is variable
+    if is_variable(y):
+        substitutions[y] = x
+        return substitutions
+
+    # Both are compound expressions
+    if '(' in x and '(' in y:
+        x_name, x_args = parse_predicate(x)
+        y_name, y_args = parse_predicate(y)
+
+        # Predicate names must match
+        if x_name != y_name or len(x_args) != len(y_args):
+            return None
+
+        # Unify each argument pair
+        for a, b in zip(x_args, y_args):
+            substitutions = unify(a, b, substitutions)
+            if substitutions is None:
+                return None
+        return substitutions
+
+    # Otherwise, unification fails
+    return None
+
+
+# --- Example from your PPT ---
+
+expr1 = "Eats(x, Apple)"
+expr2 = "Eats(Riya, y)"
+
+print("Expression 1:", expr1)
+print("Expression 2:", expr2)
+
+result = unify(expr1, expr2)
+
+if result:
+    print("\nUnification Successful!")
+    print("Substitutions:")
+    for k, v in result.items():
+        print(f"  {k} = {v}")
+
+    # Apply substitutions
+    unified_expr = expr1
+    for var, val in result.items():
+        unified_expr = re.sub(r'\b' + var + r'\b', val, unified_expr)
+    print("Unified Expression:", unified_expr)
+
+else:
+    print("\nUnification Failed!")
+
+     
+Expression 1: Eats(x, Apple)
+Expression 2: Eats(Riya, y)
+
+✅ Unification Successful!
+Substitutions:
+  x = Riya
+  y = Apple
+Unified Expression: Eats(Riya, Apple)

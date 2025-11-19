@@ -1,0 +1,138 @@
+{
+  "nbformat": 4,
+  "nbformat_minor": 0,
+  "metadata": {
+    "colab": {
+      "provenance": []
+    },
+    "kernelspec": {
+      "name": "python3",
+      "display_name": "Python 3"
+    },
+    "language_info": {
+      "name": "python"
+    }
+  },
+  "cells": [
+    {
+      "cell_type": "code",
+      "execution_count": 5,
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "0uPxMglj3kYq",
+        "outputId": "6b937dbb-2707-4ae5-c24b-49c121ae5a73"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Solution using Misplaced Tiles Heuristic:\n",
+            "[1, 2, 3]\n",
+            "[7, 4, 6]\n",
+            "[0, 5, 8]\n",
+            "Heuristic (h): 4\n",
+            "\n",
+            "[1, 2, 3]\n",
+            "[0, 4, 6]\n",
+            "[7, 5, 8]\n",
+            "Heuristic (h): 3\n",
+            "\n",
+            "[1, 2, 3]\n",
+            "[4, 0, 6]\n",
+            "[7, 5, 8]\n",
+            "Heuristic (h): 2\n",
+            "\n",
+            "[1, 2, 3]\n",
+            "[4, 5, 6]\n",
+            "[7, 0, 8]\n",
+            "Heuristic (h): 1\n",
+            "\n",
+            "[1, 2, 3]\n",
+            "[4, 5, 6]\n",
+            "[7, 8, 0]\n",
+            "Heuristic (h): 0\n",
+            "\n"
+          ]
+        }
+      ],
+      "source": [
+        "import heapq\n",
+        "\n",
+        "# Goal state\n",
+        "goal_state = [[1,2,3],[4,5,6],[7,8,0]]\n",
+        "\n",
+        "# Flatten helper\n",
+        "def flatten(state):\n",
+        "    return [num for row in state for num in row]\n",
+        "\n",
+        "# Find blank position\n",
+        "def find_blank(state):\n",
+        "    for i in range(3):\n",
+        "        for j in range(3):\n",
+        "            if state[i][j] == 0:\n",
+        "                return i, j\n",
+        "\n",
+        "# Generate neighbors\n",
+        "def get_neighbors(state):\n",
+        "    neighbors = []\n",
+        "    x, y = find_blank(state)\n",
+        "    moves = [(-1,0),(1,0),(0,-1),(0,1)]\n",
+        "    for dx, dy in moves:\n",
+        "        nx, ny = x+dx, y+dy\n",
+        "        if 0 <= nx < 3 and 0 <= ny < 3:\n",
+        "            new_state = [row[:] for row in state]\n",
+        "            new_state[x][y], new_state[nx][ny] = new_state[nx][ny], new_state[x][y]\n",
+        "            neighbors.append(new_state)\n",
+        "    return neighbors\n",
+        "\n",
+        "# Heuristic: Misplaced tiles\n",
+        "def misplaced_tiles(state):\n",
+        "    count = 0\n",
+        "    for i in range(3):\n",
+        "        for j in range(3):\n",
+        "            if state[i][j] != 0 and state[i][j] != goal_state[i][j]:\n",
+        "                count += 1\n",
+        "    return count\n",
+        "\n",
+        "# A* Search\n",
+        "def astar_misplaced(initial_state):\n",
+        "    pq = []\n",
+        "    heapq.heappush(pq, (0, initial_state, 0, []))  # (f, state, g, path)\n",
+        "    visited = set()\n",
+        "\n",
+        "    while pq:\n",
+        "        f, state, g, path = heapq.heappop(pq)\n",
+        "        flat_state = tuple(flatten(state))\n",
+        "\n",
+        "        if flat_state in visited:\n",
+        "            continue\n",
+        "        visited.add(flat_state)\n",
+        "\n",
+        "        if state == goal_state:\n",
+        "            return path + [state]\n",
+        "\n",
+        "        for neighbor in get_neighbors(state):\n",
+        "            h = misplaced_tiles(neighbor)\n",
+        "            heapq.heappush(pq, (g+1+h, neighbor, g+1, path+[state]))\n",
+        "    return None\n",
+        "\n",
+        "\n",
+        "# Example Run\n",
+        "initial_state = [[1,2,3],[7,4,6],[0,5,8]]\n",
+        "solution = astar_misplaced(initial_state)\n",
+        "print(\"Solution using Misplaced Tiles Heuristic:\")\n",
+        "if solution:\n",
+        "    for step in solution:\n",
+        "        for row in step:\n",
+        "            print(row)\n",
+        "        print(f\"Heuristic (h): {misplaced_tiles(step)}\")\n",
+        "        print()\n",
+        "else:\n",
+        "    print(\"No solution found.\")"
+      ]
+    }
+  ]
+}

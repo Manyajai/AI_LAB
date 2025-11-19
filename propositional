@@ -1,0 +1,116 @@
+
+
+# --- Propositional Logic: Truth Table Enumeration Method ---
+
+import itertools
+
+# Define propositional logic connectives
+def implies(p, q):
+    return (not p) or q
+
+def neg(p):
+    return not p
+
+def disjunction(p, q):
+    return p or q
+
+# Evaluate a propositional sentence given truth values for P, Q, R
+def evaluate(sentence, model):
+    P, Q, R = model['P'], model['Q'], model['R']
+    return eval(sentence)
+
+# Truth-table enumeration algorithm
+def truth_table_entails(KB_sentences, query):
+    symbols = ['P', 'Q', 'R']
+    all_models = list(itertools.product([False, True], repeat=len(symbols)))
+
+    kb_true_models = []
+    entails = True
+
+    for values in all_models:
+        model = dict(zip(symbols, values))
+
+        # Check if all KB sentences are true in this model
+        kb_true = all(evaluate(s, model) for s in KB_sentences)
+
+        if kb_true:
+            kb_true_models.append(model)
+            # If KB true but query false → not entailment
+            if not evaluate(query, model):
+                entails = False
+
+    return kb_true_models, entails
+
+# Define the knowledge base (as Python expressions)
+KB = [
+    "implies(Q, P)",   # Q → P
+    "implies(P, neg(Q))",  # P → ¬Q
+    "disjunction(Q, R)"    # Q ∨ R
+]
+
+# Define queries
+queries = {
+    "R": "R",
+    "R -> P": "implies(R, P)",
+    "Q -> R": "implies(Q, R)"
+}
+
+# --- OUTPUT SECTION ---
+
+print("Knowledge Base (KB):")
+for s in KB:
+    print("  ", s)
+
+symbols = ['P', 'Q', 'R']
+print("\nAll possible truth assignments (P, Q, R):")
+
+for values in itertools.product([False, True], repeat=3):
+    model = dict(zip(symbols, values))
+    kb_truth = all(evaluate(s, model) for s in KB)
+    print(model, "=> KB =", kb_truth)
+
+# --- Checking entailment for each query ---
+print("\n=== ENTAILMENT RESULTS ===")
+for qname, qexpr in queries.items():
+    kb_models, entails = truth_table_entails(KB, qexpr)
+    print(f"\nQuery: {qname}")
+    print("Models where KB is True:")
+    for m in kb_models:
+        print("  ", m)
+    print("Does KB entail", qname, "?", "✅ YES" if entails else "❌ NO")
+
+     
+Knowledge Base (KB):
+   implies(Q, P)
+   implies(P, neg(Q))
+   disjunction(Q, R)
+
+All possible truth assignments (P, Q, R):
+{'P': False, 'Q': False, 'R': False} => KB = False
+{'P': False, 'Q': False, 'R': True} => KB = True
+{'P': False, 'Q': True, 'R': False} => KB = False
+{'P': False, 'Q': True, 'R': True} => KB = False
+{'P': True, 'Q': False, 'R': False} => KB = False
+{'P': True, 'Q': False, 'R': True} => KB = True
+{'P': True, 'Q': True, 'R': False} => KB = False
+{'P': True, 'Q': True, 'R': True} => KB = False
+
+=== ENTAILMENT RESULTS ===
+
+Query: R
+Models where KB is True:
+   {'P': False, 'Q': False, 'R': True}
+   {'P': True, 'Q': False, 'R': True}
+Does KB entail R ? ✅ YES
+
+Query: R -> P
+Models where KB is True:
+   {'P': False, 'Q': False, 'R': True}
+   {'P': True, 'Q': False, 'R': True}
+Does KB entail R -> P ? ❌ NO
+
+Query: Q -> R
+Models where KB is True:
+   {'P': False, 'Q': False, 'R': True}
+   {'P': True, 'Q': False, 'R': True}
+Does KB entail Q -> R ? ✅ YES
